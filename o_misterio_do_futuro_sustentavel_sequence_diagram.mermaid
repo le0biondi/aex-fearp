@@ -1,0 +1,148 @@
+sequenceDiagram
+    actor Player
+    participant UI as GameUI
+    participant GM as GameManager
+    participant GS as GameState
+    participant CS as CaseService
+    participant DS as DialogService
+    participant CAS as ClueAnalysisService
+    participant SDGS as SDGDataService
+    participant Inv as Inventory
+    participant CH as Character
+    participant Loc as Location
+    participant PZ as Puzzle
+    
+    %% Inicialização do Jogo
+    Player->>UI: Iniciar Jogo
+    UI->>GM: startGame()
+    GM->>GS: initialize()
+    GM->>CS: getCasesList()
+    CS-->>GM: retorna CaseSummary[]
+    GM->>GS: updateAvailableCases(cases)
+    GS-->>GM: estado atualizado
+    GM-->>UI: atualiza interface
+    UI-->>Player: exibe menu principal
+    
+    %% Carregamento de um Caso
+    Player->>UI: seleciona um caso
+    UI->>GM: loadCase(caseId)
+    GM->>CS: getCaseById(caseId)
+    CS-->>GM: retorna Case
+    GM->>CS: getCaseLocations(caseId)
+    CS-->>GM: retorna Location[]
+    GM->>CS: getCaseCharacters(caseId)
+    CS-->>GM: retorna Character[]
+    GM->>SDGS: getSDGsForCase(caseId)
+    SDGS-->>GM: retorna SDG[]
+    GM->>GS: setCurrentCase(case)
+    GM->>GS: updateLocation(initialLocationId)
+    GS-->>GM: estado atualizado
+    GM-->>UI: atualiza interface
+    UI-->>Player: exibe primeira cena do caso
+    
+    %% Coleta de Pistas
+    Player->>UI: clica em ponto de interesse
+    UI->>GM: interactWithHotspot(hotspotId)
+    GM->>Loc: interact(hotspotId)
+    Loc-->>GM: retorna InteractionResult
+    
+    alt é uma pista
+        GM->>Inv: addClue(clue)
+        Inv-->>GM: inventário atualizado
+        GM->>CAS: analyzeClue(clueId)
+        CAS-->>GM: retorna ClueAnalysis
+        GM->>SDGS: getRelatedSDGsForClue(clueId)
+        SDGS-->>GM: retorna SDGs relacionados
+        GM->>Inv: updateClueWithAnalysis(clueId, analysis)
+        Inv-->>GM: inventário atualizado
+        GM-->>UI: mostra detalhes da pista
+        UI-->>Player: visualiza pista coletada
+    end
+    
+    %% Sistema de Diálogo
+    Player->>UI: inicia conversa com personagem
+    UI->>GM: startDialog(characterId)
+    GM->>DS: startDialog(characterId)
+    DS->>CH: startDialog()
+    CH-->>DS: retorna DialogNode inicial
+    DS-->>GM: retorna DialogNode
+    GM-->>UI: atualiza interface de diálogo
+    UI-->>Player: exibe diálogo inicial
+    
+    Player->>UI: seleciona opção de diálogo
+    UI->>GM: selectDialogOption(choiceId)
+    GM->>DS: getNextDialogNode(currentNodeId, choiceId)
+    DS-->>GM: retorna próximo DialogNode
+    
+    alt diálogo revela pista
+        GM->>CH: revealClue(clueId)
+        CH-->>GM: retorna Clue
+        GM->>Inv: addClue(clue)
+        Inv-->>GM: inventário atualizado
+    end
+    
+    GM-->>UI: atualiza diálogo
+    UI-->>Player: exibe nova fala e opções
+    
+    %% Acesso à Base de Dados dos ODS
+    Player->>UI: acessa Base de Dados ODS
+    UI->>GM: openSDGDatabase()
+    GM->>SDGS: getAllSDGs()
+    SDGS-->>GM: retorna lista de SDGs
+    GM-->>UI: exibe lista de ODS
+    UI-->>Player: visualiza ODS disponíveis
+    
+    Player->>UI: seleciona um ODS
+    UI->>GM: getSDGDetails(sdgId)
+    GM->>SDGS: getSDGById(sdgId)
+    SDGS-->>GM: retorna detalhes do ODS
+    GM->>SDGS: getSDGTargets(sdgId)
+    SDGS-->>GM: retorna metas do ODS
+    GM->>SDGS: getSDGConnections(sdgId)
+    SDGS-->>GM: retorna conexões com outros ODS
+    GM-->>UI: atualiza informações
+    UI-->>Player: exibe detalhes completos do ODS
+    
+    %% Resolução de Quebra-cabeças
+    Player->>UI: acessa quebra-cabeça
+    UI->>GM: loadPuzzle(puzzleId)
+    GM->>PZ: initialize()
+    PZ-->>GM: puzzle carregado
+    GM-->>UI: exibe interface do quebra-cabeça
+    UI-->>Player: visualiza desafio
+    
+    Player->>UI: submete solução
+    UI->>GM: solvePuzzle(puzzleId, attempt)
+    GM->>PZ: checkSolution(attempt)
+    
+    alt solução correta
+        PZ-->>GM: true, retorna recompensa
+        GM->>Inv: addReward(reward)
+        Inv-->>GM: inventário atualizado
+        GM->>GS: updateProgress()
+        GS-->>GM: progresso atualizado
+        GM-->>UI: exibe sucesso
+        UI-->>Player: parabeniza e mostra recompensa
+    else solução incorreta
+        PZ-->>GM: false
+        GM-->>UI: exibe dica
+        UI-->>Player: exibe feedback e sugestões
+    end
+    
+    %% Resolução de Caso
+    Player->>UI: propõe solução para caso
+    UI->>GM: proposeSolution(caseId, solution)
+    GM->>CS: checkSolution(caseId, solution)
+    CS-->>GM: retorna avaliação da solução
+    
+    alt solução adequada
+        GM->>SDGS: calculateSDGImpacts(solution)
+        SDGS-->>GM: retorna impactos nos ODS
+        GM->>GS: completeCase(caseId)
+        GS-->>GM: estado atualizado
+        GM-->>UI: exibe resultados e impactos
+        UI-->>Player: mostra relatório educacional e conquistas
+    else solução inadequada
+        GM-->>UI: exibe feedback
+        UI-->>Player: indica pontos a melhorar
+    end
